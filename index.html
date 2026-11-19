@@ -1,32 +1,47 @@
 <!DOCTYPE html>
-<!-- MK — Event Check-In page (standalone). Org: MK.
-     Talks to the Apps Script "MK - Jotform Check-In Connector" without the guest's Google account,
-     so it avoids Google's "unable to open the file" error on phones with several Google accounts. -->
+<!-- Event QR Check-In (Org: All — FC / CoK / MK)
+     ?form=<Jotform form ID>          -> guest check-in page for that event
+     ?form=<Jotform form ID>&sign=1   -> printable QR sign for that event
+     (no ?form)                        -> staff tool: paste a form link, get its sign
+     Talks to the Apps Script "Jotform Check-In Connector" without the guest's Google account. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Event Check-In</title>
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f5f6f8;margin:0;padding:24px 16px;color:#1d2433}
-  .card{max-width:420px;margin:0 auto;background:#fff;border-radius:16px;padding:28px 22px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+  :root{--accent:#f26b1d;--ink:#1d2433;--muted:#5b6475;--bg:#f5f6f8;--card:#fff}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);margin:0;padding:24px 16px;color:var(--ink)}
+  .card{max-width:420px;margin:0 auto;background:var(--card);border-radius:16px;padding:28px 22px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
   h1{font-size:22px;margin:0 0 4px}
-  p.sub{margin:0 0 20px;color:#5b6475}
+  p.sub{margin:0 0 20px;color:var(--muted)}
   label{font-weight:600;font-size:15px}
   input{width:100%;box-sizing:border-box;font-size:18px;padding:14px;border:1px solid #c9ced8;border-radius:10px;margin:8px 0 16px}
-  button,a.btn{display:block;width:100%;box-sizing:border-box;text-align:center;font-size:18px;font-weight:600;padding:14px;border:0;border-radius:10px;background:#f26b1d;color:#fff;text-decoration:none;cursor:pointer}
+  button,a.btn{display:block;width:100%;box-sizing:border-box;text-align:center;font-size:18px;font-weight:600;padding:14px;border:0;border-radius:10px;background:var(--accent);color:#fff;text-decoration:none;cursor:pointer}
   button:disabled{opacity:.6}
   .msg{margin-top:18px;padding:16px;border-radius:10px;font-size:17px;line-height:1.4}
   .ok{background:#e6f6ea;color:#14532d}
   .warn{background:#fff4e5;color:#7a3e00}
   .err{background:#fdecec;color:#7f1d1d}
   .msg a.btn{margin-top:12px}
+  .hidden{display:none}
+  /* Printable sign */
+  .sign{max-width:640px;margin:0 auto;background:#fff;text-align:center;padding:40px 24px;border-radius:16px}
+  .sign h1{font-size:44px;margin:0 0 8px}
+  .sign .event{font-size:22px;color:var(--muted);margin:0 0 28px}
+  .sign #qr{display:inline-block;padding:12px;background:#fff}
+  .sign #qr img,.sign #qr canvas{width:min(70vw,380px)!important;height:auto!important}
+  .sign .hint{font-size:22px;margin:24px 0 0}
+  .print{max-width:640px;margin:16px auto 0}
+  @media print{body{background:#fff;padding:0}.print{display:none}.sign{box-shadow:none}}
 </style>
 </head>
 <body>
-<div class="card">
+
+<!-- Guest check-in -->
+<div class="card hidden" id="guest">
   <h1>Welcome!</h1>
-  <p class="sub" id="eventName">TEST - MK Check-In Demo &middot; Check in below</p>
+  <p class="sub" id="eventName">Check in below</p>
   <form id="f">
     <label for="email">Email you registered with</label>
     <input id="email" type="email" autocomplete="email" required placeholder="you@example.com">
@@ -34,35 +49,103 @@
   </form>
   <div id="out" role="status" aria-live="polite"></div>
 </div>
-<script>
-  // Per event: change only this line (the Apps Script web app URL).
-  const API = 'https://script.google.com/macros/s/AKfycbzlRmI3zQ9dSn3dWi09gSKL1MrU-pZqHMCqr_tgY-flCgUfzkgQ2GsGhHZDIqDSS_Fziw/exec';
 
-  const f = document.getElementById('f'), go = document.getElementById('go'), out = document.getElementById('out');
-  function show(cls, text, link) {
-    out.innerHTML = '';
-    const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text;
-    if (link) { const a = document.createElement('a'); a.className = 'btn'; a.href = link; a.textContent = 'Complete registration'; d.appendChild(a); }
-    out.appendChild(d);
-  }
-  function done() { go.disabled = false; go.textContent = 'Check In'; }
-  f.addEventListener('submit', async e => {
-    e.preventDefault();
-    go.disabled = true; go.textContent = 'Checking...'; out.innerHTML = '';
-    try {
-      const email = document.getElementById('email').value;
-      const r = await (await fetch(API + '?email=' + encodeURIComponent(email), { credentials: 'omit' })).json();
-      const hi = r.firstName ? (', ' + r.firstName) : '';
-      if (r.status === 'ok') { show('ok', 'Welcome' + hi + '! You are checked in. Enjoy the event!'); f.reset(); }
-      else if (r.status === 'already') { show('ok', 'Welcome back' + hi + '! You were already checked in' + (r.time ? (' at ' + r.time) : '') + '.'); f.reset(); }
-      else if (r.status === 'not_registered') { show('warn', "You have not RSVP'd to this event. Please complete your registration to check in.", r.registerUrl); }
-      else if (r.status === 'invalid') { show('err', 'Please enter a valid email address.'); }
-      else { show('err', 'Something went wrong. Please see a staff member at the door.'); }
-    } catch (err) {
-      show('err', 'Something went wrong. Please see a staff member at the door.');
+<!-- Printable sign -->
+<div class="hidden" id="signView">
+  <div class="sign">
+    <h1>Scan to Check In</h1>
+    <p class="event" id="signEvent"></p>
+    <div id="qr"></div>
+    <p class="hint">Use the email you registered with</p>
+  </div>
+  <div class="print"><button onclick="window.print()">Print this sign</button></div>
+</div>
+
+<!-- Staff: make a sign -->
+<div class="card hidden" id="staff">
+  <h1>Make a check-in sign</h1>
+  <p class="sub">Paste the Jotform registration link (or form ID). The form needs the hidden "Checked In" field — copies of the template already have it.</p>
+  <form id="sf">
+    <label for="link">Jotform link or form ID</label>
+    <input id="link" required placeholder="https://form.jotform.com/...">
+    <button id="sgo" type="submit">Make sign</button>
+  </form>
+  <div id="sout" role="status" aria-live="polite"></div>
+</div>
+
+<!-- Message-only view -->
+<div class="card hidden" id="note"><h1 id="noteTitle"></h1><p class="sub" id="noteText"></p></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  // The Apps Script web app. Same for every event — never changes.
+  const API = 'https://script.google.com/macros/s/AKfycbzlRmI3zQ9dSn3dWi09gSKL1MrU-pZqHMCqr_tgY-flCgUfzkgQ2GsGhHZDIqDSS_Fziw/exec';
+  const STAFF_MSG = 'Something went wrong. Please see a staff member at the door.';
+
+  const params = new URLSearchParams(location.search);
+  const formId = (params.get('form') || '').replace(/\D/g, '');
+  const $ = id => document.getElementById(id);
+  const show = id => $(id).classList.remove('hidden');
+  const call = q => fetch(API + '?' + q, { credentials: 'omit' }).then(r => r.json());
+  const pageUrl = id => location.origin + location.pathname + '?form=' + id;
+
+  function note(title, text) { $('noteTitle').textContent = title; $('noteText').textContent = text; show('note'); }
+
+  if (!formId) {
+    // ---------- Staff tool ----------
+    show('staff');
+    $('sf').addEventListener('submit', async e => {
+      e.preventDefault();
+      const id = ($('link').value.match(/\d{12,}/) || [''])[0];
+      const out = $('sout'); out.innerHTML = '';
+      const msg = (cls, t) => { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = t; out.appendChild(d); };
+      if (!id) return msg('err', 'That doesn\'t look like a Jotform link or form ID.');
+      $('sgo').disabled = true; $('sgo').textContent = 'Checking...';
+      try {
+        const info = await call('form=' + id + '&info=1');
+        if (info.ok) location.href = pageUrl(id) + '&sign=1';
+        else msg('err', 'This form isn\'t set up for check-in yet. Add hidden fields named "Checked In" and "Check-In Time", or start from the template.');
+      } catch (_) { msg('err', 'Could not reach the check-in service. Try again.'); }
+      $('sgo').disabled = false; $('sgo').textContent = 'Make sign';
+    });
+  } else {
+    call('form=' + formId + '&info=1').then(info => {
+      if (!info.ok) return note('Check-in isn\'t open', 'This event isn\'t set up for check-in. Please see a staff member at the door.');
+      document.title = 'Check In - ' + info.title;
+      if (params.get('sign')) {
+        // ---------- Printable sign ----------
+        $('signEvent').textContent = info.title;
+        new QRCode($('qr'), { text: pageUrl(formId), width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
+        show('signView');
+      } else {
+        // ---------- Guest check-in ----------
+        $('eventName').textContent = info.title;
+        show('guest');
+      }
+    }).catch(() => note('Check-in is unavailable', STAFF_MSG));
+
+    const f = $('f'), go = $('go'), out = $('out');
+    function msg(cls, text, link) {
+      out.innerHTML = '';
+      const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text;
+      if (link) { const a = document.createElement('a'); a.className = 'btn'; a.href = link; a.textContent = 'Complete registration'; d.appendChild(a); }
+      out.appendChild(d);
     }
-    done();
-  });
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      go.disabled = true; go.textContent = 'Checking...'; out.innerHTML = '';
+      try {
+        const r = await call('form=' + formId + '&email=' + encodeURIComponent($('email').value));
+        const hi = r.firstName ? (', ' + r.firstName) : '';
+        if (r.status === 'ok') { msg('ok', 'Welcome' + hi + '! You are checked in. Enjoy the event!'); f.reset(); }
+        else if (r.status === 'already') { msg('ok', 'Welcome back' + hi + '! You were already checked in' + (r.time ? (' at ' + r.time) : '') + '.'); f.reset(); }
+        else if (r.status === 'not_registered') { msg('warn', "You have not RSVP'd to this event. Please complete your registration to check in.", r.registerUrl); }
+        else if (r.status === 'invalid') { msg('err', 'Please enter a valid email address.'); }
+        else { msg('err', STAFF_MSG); }
+      } catch (_) { msg('err', STAFF_MSG); }
+      go.disabled = false; go.textContent = 'Check In';
+    });
+  }
 </script>
 </body>
 </html>
