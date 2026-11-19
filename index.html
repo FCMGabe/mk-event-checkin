@@ -106,7 +106,9 @@
   const $ = id => document.getElementById(id);
   const show = id => $(id).classList.remove('hidden');
   const call = q => fetch(API + '?' + q, { credentials: 'omit' }).then(r => r.json());
-  const pageUrl = id => location.origin + location.pathname + '?form=' + id;
+  // Public address printed in every QR code, no matter where the page was opened.
+  const SITE = 'https://checkin.mitzvahkitchen.org/';
+  const pageUrl = id => SITE + '?form=' + id;
 
   function note(title, text) { $('noteTitle').textContent = title; $('noteText').textContent = text; show('note'); }
 
@@ -122,7 +124,7 @@
       $('sgo').disabled = true; $('sgo').textContent = 'Checking...';
       try {
         const info = await call('form=' + id + '&info=1');
-        if (info.ok) location.href = pageUrl(id) + '&sign=1';
+        if (info.ok) location.href = location.pathname + '?form=' + id + '&sign=1';
         else msg('err', 'This form isn\'t set up for check-in yet. Add hidden fields named "Checked In" and "Check-In Time", or start from the template.');
       } catch (_) { msg('err', 'Could not reach the check-in service. Try again.'); }
       $('sgo').disabled = false; $('sgo').textContent = 'Make sign';
