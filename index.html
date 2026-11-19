@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!-- MK — Event Check-In page (standalone). Org: MK.
+     Talks to the Apps Script "MK - Jotform Check-In Connector" without the guest's Google account,
+     so it avoids Google's "unable to open the file" error on phones with several Google accounts. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Event Check-In</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f5f6f8;margin:0;padding:24px 16px;color:#1d2433}
+  .card{max-width:420px;margin:0 auto;background:#fff;border-radius:16px;padding:28px 22px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+  h1{font-size:22px;margin:0 0 4px}
+  p.sub{margin:0 0 20px;color:#5b6475}
+  label{font-weight:600;font-size:15px}
+  input{width:100%;box-sizing:border-box;font-size:18px;padding:14px;border:1px solid #c9ced8;border-radius:10px;margin:8px 0 16px}
+  button,a.btn{display:block;width:100%;box-sizing:border-box;text-align:center;font-size:18px;font-weight:600;padding:14px;border:0;border-radius:10px;background:#f26b1d;color:#fff;text-decoration:none;cursor:pointer}
+  button:disabled{opacity:.6}
+  .msg{margin-top:18px;padding:16px;border-radius:10px;font-size:17px;line-height:1.4}
+  .ok{background:#e6f6ea;color:#14532d}
+  .warn{background:#fff4e5;color:#7a3e00}
+  .err{background:#fdecec;color:#7f1d1d}
+  .msg a.btn{margin-top:12px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Welcome!</h1>
+  <p class="sub" id="eventName">TEST - MK Check-In Demo &middot; Check in below</p>
+  <form id="f">
+    <label for="email">Email you registered with</label>
+    <input id="email" type="email" autocomplete="email" required placeholder="you@example.com">
+    <button id="go" type="submit">Check In</button>
+  </form>
+  <div id="out" role="status" aria-live="polite"></div>
+</div>
+<script>
+  // Per event: change only this line (the Apps Script web app URL).
+  const API = 'https://script.google.com/macros/s/AKfycbzlRmI3zQ9dSn3dWi09gSKL1MrU-pZqHMCqr_tgY-flCgUfzkgQ2GsGhHZDIqDSS_Fziw/exec';
+
+  const f = document.getElementById('f'), go = document.getElementById('go'), out = document.getElementById('out');
+  function show(cls, text, link) {
+    out.innerHTML = '';
+    const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text;
+    if (link) { const a = document.createElement('a'); a.className = 'btn'; a.href = link; a.textContent = 'Complete registration'; d.appendChild(a); }
+    out.appendChild(d);
+  }
+  function done() { go.disabled = false; go.textContent = 'Check In'; }
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    go.disabled = true; go.textContent = 'Checking...'; out.innerHTML = '';
+    try {
+      const email = document.getElementById('email').value;
+      const r = await (await fetch(API + '?email=' + encodeURIComponent(email), { credentials: 'omit' })).json();
+      const hi = r.firstName ? (', ' + r.firstName) : '';
+      if (r.status === 'ok') { show('ok', 'Welcome' + hi + '! You are checked in. Enjoy the event!'); f.reset(); }
+      else if (r.status === 'already') { show('ok', 'Welcome back' + hi + '! You were already checked in' + (r.time ? (' at ' + r.time) : '') + '.'); f.reset(); }
+      else if (r.status === 'not_registered') { show('warn', "You have not RSVP'd to this event. Please complete your registration to check in.", r.registerUrl); }
+      else if (r.status === 'invalid') { show('err', 'Please enter a valid email address.'); }
+      else { show('err', 'Something went wrong. Please see a staff member at the door.'); }
+    } catch (err) {
+      show('err', 'Something went wrong. Please see a staff member at the door.');
+    }
+    done();
+  });
+</script>
+</body>
+</html>
