@@ -47,7 +47,8 @@
   .sign #qr img,.sign #qr canvas{display:block;width:min(66vw,360px)!important;height:auto!important}
   .sign .hint{font-size:22px;margin:24px 0 0;color:var(--navy);font-weight:600}
   .print{max-width:640px;margin:16px auto 0}
-  @media print{body{background:#fff;padding:0}.print{display:none}.sign{box-shadow:none}
+  @page{margin:0}
+  @media print{body{background:#fff;padding:0.6in 0.5in}.print{display:none}.sign{box-shadow:none}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 </head>
